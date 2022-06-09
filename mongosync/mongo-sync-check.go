@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync/atomic"
@@ -17,7 +18,7 @@ var mongoUrl = "mongodb://mongouser:truedian#123@10.0.3.16:27017/db7?authSource=
 func init() {
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-	logFile, err := os.OpenFile("mongo-sync-check.log", os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile("mongo-sync-check.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Panic("打开日志文件异常")
 	}
@@ -25,11 +26,18 @@ func init() {
 }
 
 var pageIndex int64 = 0
+var lastItemId string = ""
+var flag bool = true
+
+const (
+	pageSize int64 = 1000
+)
 
 func main() {
 	for {
-		results := mongoPageQuery(pageIndex)
-		if len(results) <= 0 {
+		//fmt.Println("sync lastItemId:", lastItemId)
+		flag, lastItemId = mongoPageQuery(lastItemId)
+		if !flag {
 			break
 		}
 		pageIndex++
@@ -39,12 +47,14 @@ func main() {
 	log.Println("query finished!!!!")
 }
 
-func Find(database *mongo.Database, collection string, limit, index int64) (results []bson.D, err error) {
+func Find(lastItemId string) (results []bson.D, err error) {
 	ctx, cannel := context.WithTimeout(context.Background(), time.Minute)
 	defer cannel()
-
-	opts := options.Find().SetSkip(index * limit).SetLimit(limit)
-	cur, err := database.Collection(collection).Find(ctx, bson.M{}, opts)
+	filter := bson.D{{"itemId", bson.D{{"$gt", lastItemId}}}}
+	//filter := bson.D{}
+	opts := options.Find().SetLimit(pageSize).SetSort(bson.D{{"itemId", 1}}).
+		SetProjection(bson.D{{"itemId", 1}, {"sync", 1}, {"albumId", 1}})
+	cur, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -56,20 +66,34 @@ func Find(database *mongo.Database, collection string, limit, index int64) (resu
 var synced uint64 = 0
 var nosync uint64 = 0
 
-func mongoPageQuery(index int64) (results []bson.D) {
+var mongoclient *mongo.Client
+var conerr error
+var collection *mongo.Collection
+
+func init() {
 	clientOptions := options.Client().ApplyURI(mongoUrl)
-
-	client, err := mongo.Connect(context.TODO(), clientOptions)
-	if err != nil {
-		log.Fatal("mongoPageQuery Connect", err)
+	mongoclient, conerr = mongo.Connect(context.TODO(), clientOptions)
+	collection = mongoclient.Database("db7").Collection("tb_album_item")
+	if conerr != nil {
+		log.Fatal("mongoPageQuery Connect", conerr)
 	}
+}
 
-	database := client.Database("db7")
-	results, err = Find(database, "tb_album_item", 1000, index)
+func mongoPageQuery(lastItemId string) (flag bool, returnLastItemId string) {
+	start := time.Now() // 获取当前时间
+	results, err := Find(lastItemId)
+	if int64(len(results)) < pageSize {
+		log.Println("size", int64(len(results)), "pageIndex", pageIndex)
+		return false, ""
+	}
+	elapsed := time.Since(start)
+
+	fmt.Println("查询mongodb执行完成耗时：", elapsed)
+	returnLastItemId = results[len(results)-1].Map()["itemId"].(string)
 	if err != nil {
 		log.Println("mongoPageQuery Find", err)
 	}
-	//fmt.Print("results size:", len(results))
+
 	for _, result := range results {
 		if result.Map()["sync"] == int32(1) {
 			atomic.AddUint64(&synced, 1)
@@ -81,5 +105,5 @@ func mongoPageQuery(index int64) (results []bson.D) {
 			log.Println(result.Map()["albumId"].(string), result.Map()["itemId"].(string), nosync)
 		}
 	}
-	return
+	return true, returnLastItemId
 }
