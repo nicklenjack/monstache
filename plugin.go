@@ -165,7 +165,7 @@ func setIndex(doc map[string]interface{}, output *monstachemap.MapperPluginOutpu
 //生成用来删除的doc
 func newDelDoc(doc map[string]interface{}) map[string]interface{} {
 
-	syncDoc := make(map[string]interface{}, 22)
+	syncDoc := make(map[string]interface{}, 30)
 
 	if doc["compliance"] != nil {
 		syncDoc["compliance"] = doc["compliance"]
@@ -181,7 +181,6 @@ func newDelDoc(doc map[string]interface{}) map[string]interface{} {
 	syncDoc["goodsNum"] = nil
 	syncDoc["itemCaption"] = nil
 	syncDoc["itemId"] = doc["itemId"]
-	syncDoc["itemKeyValue"] = nil
 	syncDoc["itemName"] = nil
 	syncDoc["itemNameWord"] = nil
 	syncDoc["itemOwnSrcId"] = nil
@@ -193,6 +192,8 @@ func newDelDoc(doc map[string]interface{}) map[string]interface{} {
 	syncDoc["parentAlbumId"] = nil
 	syncDoc["itemType"] = nil
 	syncDoc["updateTime"] = nil
+	syncDoc["distributionAgentMark"] = nil
+	syncDoc["distributionMark"] = nil
 	syncDoc["shareType"] = nil
 	syncDoc["imgIds"] = nil
 	return syncDoc
@@ -200,7 +201,7 @@ func newDelDoc(doc map[string]interface{}) map[string]interface{} {
 
 //生成一个正常同步的doc
 func newDoc(doc map[string]interface{}, itemTagList string, shareType int8, imgIdStr string) map[string]interface{} {
-	syncDoc := make(map[string]interface{}, 22)
+	syncDoc := make(map[string]interface{}, 30)
 	if doc["albumId"] != nil {
 		syncDoc["albumId"] = doc["albumId"]
 	}
@@ -273,12 +274,16 @@ func newDoc(doc map[string]interface{}, itemTagList string, shareType int8, imgI
 		syncDoc["state"] = doc["state"]
 	}
 
-	if doc["itemType"] != nil {
-		syncDoc["itemType"] = doc["itemType"]
-	}
-
 	if doc["updateTime"] != nil {
 		syncDoc["updateTime"] = doc["updateTime"].(time.Time).UnixMilli()
+	}
+
+	if doc["distributionAgentMark"] != nil {
+		syncDoc["distributionAgentMark"] = doc["distributionAgentMark"]
+	}
+
+	if doc["distributionMark"] != nil {
+		syncDoc["distributionMark"] = doc["distributionMark"]
 	}
 
 	syncDoc["shareType"] = shareType
